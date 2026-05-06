@@ -1,0 +1,59 @@
+services:
+  backend:
+    image: finalto-risk-dashboard-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_PATH: /data/risk_dashboard.db
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LIVE_PAYLOAD_CACHE_SECONDS: ${LIVE_PAYLOAD_CACHE_SECONDS:-0.5}
+    volumes:
+      - risk-data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  mock-feed:
+    image: finalto-risk-dashboard-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "backend.mock.feed"]
+    environment:
+      DATABASE_PATH: /data/risk_dashboard.db
+      MOCK_ORDER_SCALE: ${MOCK_ORDER_SCALE:-1}
+      MOCK_ORDER_INTERVAL_SECONDS: ${MOCK_ORDER_INTERVAL_SECONDS:-1.5}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - risk-data:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    image: finalto-risk-dashboard-frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  risk-data:
